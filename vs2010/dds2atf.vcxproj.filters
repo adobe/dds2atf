@@ -1,0 +1,137 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="jpegxr">
+      <UniqueIdentifier>{128c2a67-84a0-4e95-8bf7-893e2ac21da4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lzma">
+      <UniqueIdentifier>{f2f86b49-40d0-4362-b0d0-9298ee8513e6}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\3rdparty\jpegxr\cr_parse.cpp">
+      <Filter>jpegxr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\jpegxr\cw_emit.cpp">
+      <Filter>jpegxr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\jpegxr\jpegxr_algo.cpp">
+      <Filter>jpegxr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\jpegxr\jpegxr_api.cpp">
+      <Filter>jpegxr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\jpegxr\jpegxr_flags.cpp">
+      <Filter>jpegxr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\jpegxr\jpegxr_init.cpp">
+      <Filter>jpegxr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\jpegxr\jpegxr_io.cpp">
+      <Filter>jpegxr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\jpegxr\jpegxr_pixelformat.cpp">
+      <Filter>jpegxr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\jpegxr\r_parse.cpp">
+      <Filter>jpegxr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\jpegxr\r_strip.cpp">
+      <Filter>jpegxr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\jpegxr\r_tile_frequency.cpp">
+      <Filter>jpegxr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\jpegxr\r_tile_spatial.cpp">
+      <Filter>jpegxr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\jpegxr\w_emit.cpp">
+      <Filter>jpegxr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\jpegxr\w_strip.cpp">
+      <Filter>jpegxr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\jpegxr\w_tile_frequency.cpp">
+      <Filter>jpegxr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\jpegxr\w_tile_spatial.cpp">
+      <Filter>jpegxr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\jpegxr\x_strip.cpp">
+      <Filter>jpegxr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\lzma\Alloc.c">
+      <Filter>lzma</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\lzma\Bcj2.c">
+      <Filter>lzma</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\lzma\Bra.c">
+      <Filter>lzma</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\lzma\Bra86.c">
+      <Filter>lzma</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\lzma\BraIA64.c">
+      <Filter>lzma</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\lzma\LzFind.c">
+      <Filter>lzma</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\lzma\LzmaDec.c">
+      <Filter>lzma</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\lzma\LzmaEnc.c">
+      <Filter>lzma</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\lzma\LzmaLib.c">
+      <Filter>lzma</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dds2atf.cpp" />
+    <ClCompile Include="..\pvr2atfcore.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\3rdparty\jpegxr\jpegxr.h">
+      <Filter>jpegxr</Filter>
+    </ClInclude>
+    <ClInclude Include="..\3rdparty\jpegxr\jpegxr_stdint_minimal.h">
+      <Filter>jpegxr</Filter>
+    </ClInclude>
+    <ClInclude Include="..\3rdparty\jpegxr\jxr_priv.h">
+      <Filter>jpegxr</Filter>
+    </ClInclude>
+    <ClInclude Include="..\3rdparty\lzma\Alloc.h">
+      <Filter>lzma</Filter>
+    </ClInclude>
+    <ClInclude Include="..\3rdparty\lzma\Bcj2.h">
+      <Filter>lzma</Filter>
+    </ClInclude>
+    <ClInclude Include="..\3rdparty\lzma\Bra.h">
+      <Filter>lzma</Filter>
+    </ClInclude>
+    <ClInclude Include="..\3rdparty\lzma\CpuArch.h">
+      <Filter>lzma</Filter>
+    </ClInclude>
+    <ClInclude Include="..\3rdparty\lzma\LzFind.h">
+      <Filter>lzma</Filter>
+    </ClInclude>
+    <ClInclude Include="..\3rdparty\lzma\LzHash.h">
+      <Filter>lzma</Filter>
+    </ClInclude>
+    <ClInclude Include="..\3rdparty\lzma\LzmaDec.h">
+      <Filter>lzma</Filter>
+    </ClInclude>
+    <ClInclude Include="..\3rdparty\lzma\LzmaEnc.h">
+      <Filter>lzma</Filter>
+    </ClInclude>
+    <ClInclude Include="..\3rdparty\lzma\LzmaLib.h">
+      <Filter>lzma</Filter>
+    </ClInclude>
+    <ClInclude Include="..\3rdparty\lzma\Threads.h">
+      <Filter>lzma</Filter>
+    </ClInclude>
+    <ClInclude Include="..\3rdparty\lzma\Types.h">
+      <Filter>lzma</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
