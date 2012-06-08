@@ -10,3 +10,7 @@
 *.lai
 *.la
 *.a
+
+*.log
+*.tlog
+vs2010/Objs
