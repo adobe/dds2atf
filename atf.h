@@ -145,9 +145,13 @@ class ATFDecoder {
 		
 		bool lzma_decode_top(size_t len, int32_t w, int32_t h, bool left);
 		bool lzma_decode_bottom(size_t len, int32_t w, int32_t h, bool left);
+		bool lzma_decode_wide(size_t len, int32_t w, int32_t h, bool left);
+		
 		bool convert_888_texture(int32_t w, int32_t h, bool &empty);
 		bool convert_8888_texture(int32_t w, int32_t h, bool &empty);
 		bool convert_dxt1_texture(bool skip, int32_t w, int32_t h, bool &empty);
+		bool convert_dxt5_texture(bool skip, int32_t w, int32_t h, bool &empty);
+		bool convert_pvrtc_alpha_texture(bool skip, int32_t w, int32_t h, bool &empty);
 		bool convert_pvrtc_texture(bool skip, int32_t w, int32_t h, bool &empty);
 		bool convert_etc1_texture(bool skip, int32_t w, int32_t h, bool &empty);
 		bool convert_dxt1_raw_texture(bool skip, int32_t w, int32_t h, bool &empty);

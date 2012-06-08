@@ -194,8 +194,13 @@ struct ImageData {
 
 	uint8_t  *raw;
 
+	uint8_t  *dxt5_alp;		 // dxt1 color map
+	uint8_t  *dxt5_abt;		 // dxt1 bit data
+	uint16_t *dxt5_col;		 // dxt1 color map
+	uint8_t  *dxt5_bit;		 // dxt1 bit data
+
 	uint16_t *dxt1_col;		 // dxt1 color map
-	uint32_t *dxt1_bit;		 // dxt1 bit data
+	uint8_t  *dxt1_bit;		 // dxt1 bit data
 
 	uint16_t *pvrtc_col;	 // pvrtc color map
 	uint8_t  *pvrtc_d0;		 // pvrtc data top
@@ -285,6 +290,15 @@ static bool SetJPEGXRaw(jxr_container_t container, jxr_image_t image, int32_t qu
     return true;
 }
 
+static bool SetJPEG8(jxr_container_t container, jxr_image_t image, int32_t quality, int32_t w, int32_t h) {
+	jxr_set_INTERNAL_CLR_FMT(image, JXR_YONLY, 1);
+	jxr_set_OUTPUT_CLR_FMT(image, JXR_OCF_YONLY);
+	jxr_set_OUTPUT_BITDEPTH(image, JXR_BD8);   
+	SetJPEGXRCommon(container,image,false,w,h);
+	SetJPEGXRQuality(image,quality);
+    return true;
+}
+
 static bool SetJPEGX565(jxr_container_t container, jxr_image_t image, int32_t quality, int32_t w, int32_t h) {
 	jxr_set_INTERNAL_CLR_FMT(image, gJxrFormat, 1);
 	jxr_set_OUTPUT_CLR_FMT(image, JXR_OCF_RGB);
@@ -357,6 +371,60 @@ static void Read888Data(jxr_image_t image, int mx, int my, int *data) {
 				data[(16*y+x)*n+0] = (imageData->raw[((dy*w)+dx)*3+0]);
 				data[(16*y+x)*n+1] = (imageData->raw[((dy*w)+dx)*3+1]);
 				data[(16*y+x)*n+2] = (imageData->raw[((dy*w)+dx)*3+2]);
+			} else {
+				data[(y*16+x)*n+2] = 0;
+				data[(y*16+x)*n+1] = 0;
+				data[(y*16+x)*n+0] = 0;
+			}
+		}
+	}
+}
+
+static void Read8Data_DXT5(jxr_image_t image, int mx, int my, int *data) {
+	ImageData *imageData = (ImageData*)jxr_get_user_data(image);
+	int32_t w = jxr_get_IMAGE_WIDTH(image);
+	int32_t h = jxr_get_IMAGE_HEIGHT(image);
+	int32_t n = jxr_get_IMAGE_CHANNELS(image);
+	for ( int32_t y=0; y<16; y++) {
+		int32_t dy = (my*16) + y;
+		for ( int32_t x=0; x<16; x++) {
+			int32_t dx = (mx*16) + x;
+			if ( dy < h && dx < w ) {
+				uint8_t p = imageData->dxt5_alp[(dy*w)+dx];
+				data[(y*16+x)*n+0] = p;
+			} else {
+				data[(y*16+x)*n+0] = 0;
+			}
+		}
+	}
+}
+
+static void Read565Data_DXT5(jxr_image_t image, int mx, int my, int *data) {
+	ImageData *imageData = (ImageData*)jxr_get_user_data(image);
+	int32_t w = jxr_get_IMAGE_WIDTH(image);
+	int32_t h = jxr_get_IMAGE_HEIGHT(image);
+	int32_t n = jxr_get_IMAGE_CHANNELS(image);
+	for ( int32_t y=0; y<16; y++) {
+		int32_t dy = (my*16) + y;
+		for ( int32_t x=0; x<16; x++) {
+			int32_t dx = (mx*16) + x;
+			if ( dy < h && dx < w ) {
+				uint32_t p = imageData->dxt5_col[(dy*w)+dx];
+				if ( p ) {	
+					int32_t r = ( p >> 11 ) & 0x1F;
+					int32_t g = ( p >>  5 ) & 0x3F;
+					int32_t b = ( p >>  0 ) & 0x1F;
+					// Bug in JPEG-XR encoder: it wants 666 instead of 565
+					r = (r<<1) | (r>>4);
+					b = (b<<1) | (b>>4);
+					data[(y*16+x)*n+2] = r;
+					data[(y*16+x)*n+1] = g;
+					data[(y*16+x)*n+0] = b;
+				} else {
+					data[(y*16+x)*n+2] = 0;
+					data[(y*16+x)*n+1] = 0;
+					data[(y*16+x)*n+0] = 0;
+				}
 			} else {
 				data[(y*16+x)*n+2] = 0;
 				data[(y*16+x)*n+1] = 0;
@@ -716,8 +784,8 @@ static bool write_dxt1(int32_t w, int32_t h, int32_t level, bool flipped, istrea
 			imageData.dxt1_col = new uint16_t[max(2,(w/4))*max(2,(h/4)*2)];
 			uint16_t *cl0 = imageData.dxt1_col;
 			uint16_t *cl1 = imageData.dxt1_col + max(1,w/4)*max(1,h/4);
-			imageData.dxt1_bit = new uint32_t[max(1,w/4)*max(1,h/4)];
-			uint8_t *bit = (uint8_t *)imageData.dxt1_bit;
+			imageData.dxt1_bit = new uint8_t[max(1,w/4)*max(1,h/4)*4];
+			uint8_t *bit = imageData.dxt1_bit;
 			for ( int32_t d=0; d<max(1,w/4)*max(1,h/4); d++) {
 				if ( gEncodeEmptyMipmap && level > 0 ) {
 					*cl0++ = 0;
@@ -827,18 +895,29 @@ static bool write_dxt5(int32_t w, int32_t h, int32_t level, bool flipped, istrea
 
 		} else {
 
-            return false;
-
-/*			ImageData imageData;
+			ImageData imageData;
 			imageData.flipped = flipped;
-			imageData.dxt1_col = new uint16_t[max(2,(w/4))*max(2,(h/4)*2)];
-			uint16_t *cl0 = imageData.dxt1_col;
-			uint16_t *cl1 = imageData.dxt1_col + max(1,w/4)*max(1,h/4);
-			imageData.dxt1_bit = new uint32_t[max(1,w/4)*max(1,h/4)];
-			uint8_t *bit = (uint8_t *)imageData.dxt1_bit;
+			imageData.dxt5_alp = new uint8_t[max(2,(w/4))*max(2,(h/4)*2)];
+			imageData.dxt5_col = new uint16_t[max(2,(w/4))*max(2,(h/4)*2)];
+			uint8_t *al0 = imageData.dxt5_alp;
+			uint8_t *al1= imageData.dxt5_alp + max(1,w/4)*max(1,h/4);
+			uint16_t *cl0 = imageData.dxt5_col;
+			uint16_t *cl1 = imageData.dxt5_col + max(1,w/4)*max(1,h/4);
+			imageData.dxt5_abt = new uint8_t[max(1,w/4)*max(1,h/4)*6];
+			imageData.dxt5_bit = new uint8_t[max(1,w/4)*max(1,h/4)*4];
+			uint8_t *abt = (uint8_t *)imageData.dxt5_abt;
+			uint8_t *bit = (uint8_t *)imageData.dxt5_bit;
 			for ( int32_t d=0; d<max(1,w/4)*max(1,h/4); d++) {
-
 				if ( gEncodeEmptyMipmap && level > 0 ) {
+					*al0++ = 0;
+					*al1++ = 0;
+					*abt++ = 0;
+					*abt++ = 0;
+					*abt++ = 0;
+					*abt++ = 0;
+					*abt++ = 0;
+					*abt++ = 0;
+
 					*cl0++ = 0;
 					*cl1++ = 0;
 					*bit++ = 0;
@@ -846,14 +925,22 @@ static bool write_dxt5(int32_t w, int32_t h, int32_t level, bool flipped, istrea
 					*bit++ = 0;
 					*bit++ = 0;
 				} else {
+					uint8_t a0 = read_uint8(ifile);
+					*al0++ = a0;
+					uint8_t a1 = read_uint8(ifile);
+					*al1++ = a1;
+
+					*abt++ = read_uint8(ifile);
+					*abt++ = read_uint8(ifile);
+					*abt++ = read_uint8(ifile);
+					*abt++ = read_uint8(ifile);
+					*abt++ = read_uint8(ifile);
+					*abt++ = read_uint8(ifile);
+
 					uint16_t c0 = read_uint16(ifile);
 					*cl0++ = c0;
 					uint16_t c1 = read_uint16(ifile);
 					*cl1++ = c1;
-					if ( gCheckForAlphaValue && c0 < c1 ) {
-						cerr << "DXT1 textures with alpha not supported!\n\n";
-						return false;
-					}
 					*bit++ = read_uint8(ifile);
 					*bit++ = read_uint8(ifile);
 					*bit++ = read_uint8(ifile);
@@ -862,15 +949,208 @@ static bool write_dxt5(int32_t w, int32_t h, int32_t level, bool flipped, istrea
 			}
 
 			{
-				uint8_t *buffer = new uint8_t[max(1,w/4)*max(1,h/4)*sizeof(uint32_t)*2+LZMA_PROPS_SIZE+4096];
+				uint8_t *buffer = new uint8_t[max(1,w/4)*max(1,h/4)*sizeof(uint32_t)*8+LZMA_PROPS_SIZE+4096];
 
-				size_t bufferLen = LzmaSlowCompress((uint8_t*)imageData.dxt1_bit, buffer, max(1,w/4)*max(1,h/4)*sizeof(uint32_t));
+				size_t bufferLen = LzmaSlowCompress((uint8_t*)imageData.dxt5_abt, buffer, max(1,w/4)*max(1,h/4)*6);
 				
 				write_uint24(bufferLen,ofile);
 
 				ofile.write((const char *)buffer,bufferLen);
 				outlzmasize += bufferLen;
 
+				delete [] buffer;
+			}
+
+			{
+				jxr_container_t container = jxr_create_container();
+				jxrc_start_file(container);
+
+				if ( jxrc_begin_ifd_entry(container) != 0 ) {
+					cerr << "Could not create ATF file!\n\n";
+					return false;
+				}
+				jxrc_set_pixel_format(container, JXRC_FMT_8bppGray);
+				jxrc_set_image_shape(container, max(1,w/4), max(2,h/2));
+				jxrc_set_separate_alpha_image_plane(container, 0);
+				jxrc_set_image_band_presence(container, JXR_BP_ALL);
+				static unsigned char window_params[5] = {0,0,0,0,0};
+				jxr_image_t image = jxr_create_image(max(1,w/4), max(2,h/2), window_params);
+
+				if ( !image ) {
+					return false;
+				}
+
+				SetJPEG8(container,image,gJxrQuality, max(1,w/4), max(2,h/2));
+
+				jxrc_begin_image_data(container);
+				jxr_set_block_input(image, Read8Data_DXT5);  
+				jxr_set_user_data(image, &imageData);
+
+				if ( jxr_write_image_bitstream(image,container) != 0 ) {
+					cerr << "JPEGXR encoding error!\n\n";
+					return false;
+				}
+
+				jxr_destroy(image); 
+
+				jxrc_write_container_post(container);
+
+				//write_debug_image(container);
+
+				write_uint24(container->wb.len(),ofile);
+				ofile.write((const char *)container->wb.buffer(),container->wb.len());
+				
+				jxr_destroy_container(container);
+			}
+
+			{
+				uint8_t *buffer = new uint8_t[max(1,w/4)*max(1,h/4)*sizeof(uint32_t)*8+LZMA_PROPS_SIZE+4096];
+
+				size_t bufferLen = LzmaSlowCompress((uint8_t*)imageData.dxt5_bit, buffer, max(1,w/4)*max(1,h/4)*4);
+				
+				write_uint24(bufferLen,ofile);
+
+				ofile.write((const char *)buffer,bufferLen);
+				outlzmasize += bufferLen;
+
+				delete [] buffer;
+			}
+
+			{
+				jxr_container_t container = jxr_create_container();
+				jxrc_start_file(container);
+
+				if ( jxrc_begin_ifd_entry(container) != 0 ) {
+					cerr << "Could not create ATF file!\n\n";
+					return false;
+				}
+				jxrc_set_pixel_format(container, JXRC_FMT_16bppBGR565);
+				jxrc_set_image_shape(container, max(1,w/4), max(2,h/2));
+				jxrc_set_separate_alpha_image_plane(container, 0);
+				jxrc_set_image_band_presence(container, JXR_BP_ALL);
+				static unsigned char window_params[5] = {0,0,0,0,0};
+				jxr_image_t image = jxr_create_image(max(1,w/4), max(2,h/2), window_params);
+
+				if ( !image ) {
+					return false;
+				}
+
+				SetJPEGX565(container,image,gJxrQuality, max(1,w/4), max(2,h/2));
+
+				jxrc_begin_image_data(container);
+				jxr_set_block_input(image, Read565Data_DXT5);  
+				jxr_set_user_data(image, &imageData);
+
+				if ( jxr_write_image_bitstream(image,container) != 0 ) {
+					cerr << "JPEGXR encoding error!\n\n";
+					return false;
+				}
+
+				jxr_destroy(image); 
+
+				jxrc_write_container_post(container);
+
+				//write_debug_image(container);
+
+				write_uint24(container->wb.len(),ofile);
+				ofile.write((const char *)container->wb.buffer(),container->wb.len());
+				
+				jxr_destroy_container(container);
+			}
+			
+			delete [] imageData.dxt5_alp;
+			delete [] imageData.dxt5_abt;
+			delete [] imageData.dxt5_col;
+			delete [] imageData.dxt5_bit;
+		}
+	} else {
+		if ( gStoreRawCompressed ) {
+			write_uint24(0,ofile);
+		} else {
+			write_uint24(0,ofile);
+			write_uint24(0,ofile);
+			write_uint24(0,ofile);
+			write_uint24(0,ofile);
+		}
+		for ( int32_t d=0; d<max(1,w/4)*max(1,h/4); d++) {
+            read_uint32(ifile);
+            read_uint32(ifile);
+            read_uint32(ifile);
+            read_uint32(ifile);
+        }
+	}
+	return true;
+}
+
+static bool write_pvrtc_alpha(int32_t w, int32_t h, int32_t level, bool flipped, istream &ifile, ostream &ofile)
+{
+	int32_t pw = max(int32_t(PVRTC4_MIN_TEXWIDTH),w);
+	int32_t ph = max(int32_t(PVRTC4_MIN_TEXWIDTH),h);
+
+	if ( ( gCompressedFormats == 0 || gCompressedFormats == 3 ) && !(level < gEmbedRangeStart || level > gEmbedRangeEnd ) ) {
+
+        if ( gStoreRawCompressed ) {
+
+			uint32_t tsize = max(1,pw/4)*max(1,ph/4)*sizeof(uint32_t)*2;
+			write_uint24(tsize,ofile);
+			for ( int32_t d=0; d<tsize; d++) {
+				write_uint8(read_uint8(ifile),ofile);
+			}
+
+		} else {
+			ImageData imageData;
+			imageData.flipped = flipped;
+			imageData.pvrtc_col = new uint16_t[max(2,pw/4)*max(2,ph/4)*2];
+			uint16_t *cl0 = imageData.pvrtc_col;
+			uint16_t *cl1 = imageData.pvrtc_col + max(1,pw/4)*max(1,ph/4);
+			imageData.pvrtc_d0 = new uint8_t[max(1,pw/4)*max(1,ph/4)];
+			uint8_t *d0 = (uint8_t *)imageData.pvrtc_d0;
+			imageData.pvrtc_d1 = new uint32_t[max(1,pw/4)*max(1,ph/4)];
+			uint8_t *d1 = (uint8_t *)imageData.pvrtc_d1;
+			
+			for ( int32_t d=0; d<max(1,pw/4)*max(1,ph/4); d++) {
+				if ( gEncodeEmptyMipmap && level > 0 ) {
+					*d1++ = 0;
+					*d1++ = 0;
+					*d1++ = 0;
+					*d1++ = 0;
+					*cl0++ = 0;
+					*d0++ = 0;
+					*cl1++ = 0;
+				} else {
+					*d1++ = read_uint8(ifile);
+					*d1++ = read_uint8(ifile);
+					*d1++ = read_uint8(ifile);
+					*d1++ = read_uint8(ifile);
+					uint16_t c0 = read_uint16(ifile);
+					*cl0++ = c0;
+					uint16_t c1 = read_uint16(ifile);
+					*d0++ = ( ( c0 & 1 ) ? 1 : 0 ) | ( ( c0 & 0x8000 ) ? 2 : 0 ) | ( ( c1 & 0x8000 ) ? 4 : 0 );
+					*cl1++ = c1;
+				}
+			}
+
+			{ // pvrtc d1
+				uint8_t *buffer = new uint8_t[max(1,pw/4)*max(1,ph/4)*sizeof(uint8_t)*2+LZMA_PROPS_SIZE+4096];
+
+				size_t bufferLen = LzmaSlowCompress((uint8_t*)imageData.pvrtc_d0, buffer, max(1,pw/4)*max(1,ph/4)*sizeof(uint8_t));
+
+				write_uint24(bufferLen,ofile);
+
+				ofile.write((const char *)buffer,bufferLen);
+				outlzmasize += bufferLen;
+				delete [] buffer;
+			}
+			
+			{ // pvrtc d1
+				uint8_t *buffer = new uint8_t[max(1,pw/4)*max(1,ph/4)*sizeof(uint32_t)*2+LZMA_PROPS_SIZE+4096];
+
+				size_t bufferLen = LzmaSlowCompress((uint8_t*)imageData.pvrtc_d1, buffer, max(1,pw/4)*max(1,ph/4)*sizeof(uint32_t));
+
+				write_uint24(bufferLen,ofile);
+
+				ofile.write((const char *)buffer,bufferLen);
+				outlzmasize += bufferLen;
 				delete [] buffer;
 			}
 
@@ -881,25 +1161,25 @@ static bool write_dxt5(int32_t w, int32_t h, int32_t level, bool flipped, istrea
 				cerr << "Could not create ATF file!\n\n";
 				return false;
 			}
-			jxrc_set_pixel_format(container, JXRC_FMT_16bppBGR565);
-			jxrc_set_image_shape(container, max(1,w/4), max(2,h/2));
+			jxrc_set_pixel_format(container, JXRC_FMT_16bppBGR555);
+			jxrc_set_image_shape(container, max(1,pw/4), max(2,ph/2));
 			jxrc_set_separate_alpha_image_plane(container, 0);
 			jxrc_set_image_band_presence(container, JXR_BP_ALL);
 			static unsigned char window_params[5] = {0,0,0,0,0};
-			jxr_image_t image = jxr_create_image(max(1,w/4), max(2,h/2), window_params);
+			jxr_image_t image = jxr_create_image(max(1,pw/4), max(2,ph/2), window_params);
 
 			if ( !image ) {
 				return false;
 			}
 
-			SetJPEGX565(container,image,gJxrQuality, max(1,w/4), max(2,h/2));
+			SetJPEGX555(container,image,gJxrQuality, max(1,pw/4), max(2,ph/2));
 
 			jxrc_begin_image_data(container);
-			jxr_set_block_input(image, Read565Data_DXT1);  
+			jxr_set_block_input(image, Read555Data_PVRTC);  
 			jxr_set_user_data(image, &imageData);
 
 			if ( jxr_write_image_bitstream(image,container) != 0 ) {
-				cerr << "JPEGXR encoding error!\n\n";
+				cerr << "JPEGXR encoding error!\n";
 				return false;
 			}
 
@@ -908,14 +1188,15 @@ static bool write_dxt5(int32_t w, int32_t h, int32_t level, bool flipped, istrea
 			jxrc_write_container_post(container);
 
 			//write_debug_image(container);
-
+			
 			write_uint24(container->wb.len(),ofile);
 			ofile.write((const char *)container->wb.buffer(),container->wb.len());
 			
 			jxr_destroy_container(container);
 			
-			delete [] imageData.dxt1_col;
-			delete [] imageData.dxt1_bit;*/
+			delete [] imageData.pvrtc_col;
+			delete [] imageData.pvrtc_d0;
+			delete [] imageData.pvrtc_d1;
 		}
 	} else {
 		if ( gStoreRawCompressed ) {
@@ -925,13 +1206,14 @@ static bool write_dxt5(int32_t w, int32_t h, int32_t level, bool flipped, istrea
 			write_uint24(0,ofile);
 			write_uint24(0,ofile);
 		}
-		for ( int32_t d=0; d<max(1,w/4)*max(1,h/4); d++) {
+		for ( int32_t d=0; d<max(1,pw/4)*max(1,ph/4); d++) {
             read_uint32(ifile);
             read_uint32(ifile);
         }
 	}
 	return true;
 }
+
 
 static bool write_pvrtc(int32_t w, int32_t h, int32_t level, bool flipped, istream &ifile, ostream &ofile)
 {
@@ -1089,17 +1371,17 @@ static bool write_etc1(int32_t w, int32_t h, int32_t level, bool flipped, istrea
 			}
 
 		} else {
-		
+
 			ImageData imageData;
 			imageData.flipped = flipped;
-			imageData.etc1_col = new uint32_t[max(2,w/4)*max(2,h/2)];
+			imageData.etc1_col = new uint32_t[max(2,w/4)*max(2,h/2)*(alpha?2:1)];
 			uint32_t *col = imageData.etc1_col;
-			imageData.etc1_d0 = new uint8_t[max(1,w/4)*max(1,h/4)];
+			imageData.etc1_d0 = new uint8_t[max(1,w/4)*max(1,h/4)*(alpha?2:1)];
 			uint8_t *d0 = (uint8_t *)imageData.etc1_d0;
-			imageData.etc1_d1 = new uint32_t[max(1,w/4)*max(1,h/4)];
+			imageData.etc1_d1 = new uint32_t[max(1,w/4)*max(1,h/4)*(alpha?2:1)];
 			uint8_t *d1 = (uint8_t *)imageData.etc1_d1;
 
-			for ( int32_t d=0; d<max(1,w/4)*max(1,h/4); d++) {
+			for ( int32_t d=0; d<max(1,w/4)*max(1,h/4)*(alpha?2:1); d++) {
 				if ( gEncodeEmptyMipmap && level > 0 ) {
 					*col++ = 0;
 					*d0++ = 0;
@@ -1118,9 +1400,9 @@ static bool write_etc1(int32_t w, int32_t h, int32_t level, bool flipped, istrea
 			}
 
 			{ // etc1 d0 data				
-				uint8_t *buffer = new uint8_t[max(1,w/4)*max(1,h/4)*sizeof(uint8_t)*2+LZMA_PROPS_SIZE+4096];
+				uint8_t *buffer = new uint8_t[max(1,w/4)*max(1,h/4)*sizeof(uint8_t)*2*(alpha?2:1)+LZMA_PROPS_SIZE+4096];
 
-				size_t bufferLen = LzmaSlowCompress((uint8_t*)imageData.etc1_d0, buffer, max(1,w/4)*max(1,h/4)*sizeof(uint8_t));
+				size_t bufferLen = LzmaSlowCompress((uint8_t*)imageData.etc1_d0, buffer, max(1,w/4)*max(1,h/4)*sizeof(uint8_t)*(alpha?2:1));
 
 				write_uint24(bufferLen,ofile);
 
@@ -1131,9 +1413,9 @@ static bool write_etc1(int32_t w, int32_t h, int32_t level, bool flipped, istrea
 			}
 
 			{ // etc1 d1 data				
-				uint8_t *buffer = new uint8_t[max(1,w/4)*max(1,h/4)*sizeof(uint32_t)*2+LZMA_PROPS_SIZE+4096];
+				uint8_t *buffer = new uint8_t[max(1,w/4)*max(1,h/4)*sizeof(uint32_t)*2*(alpha?2:1)+LZMA_PROPS_SIZE+4096];
 				
-				size_t bufferLen = LzmaSlowCompress((uint8_t*)imageData.etc1_d1, buffer, max(1,w/4)*max(1,h/4)*sizeof(uint32_t));
+				size_t bufferLen = LzmaSlowCompress((uint8_t*)imageData.etc1_d1, buffer, max(1,w/4)*max(1,h/4)*sizeof(uint32_t)*(alpha?2:1));
 
 				write_uint24(bufferLen,ofile);
 
@@ -1151,17 +1433,17 @@ static bool write_etc1(int32_t w, int32_t h, int32_t level, bool flipped, istrea
 				return false;
 			}
 			jxrc_set_pixel_format(container, JXRC_FMT_16bppBGR555);
-			jxrc_set_image_shape(container, max(1,w/4), max(2,h/2));
+			jxrc_set_image_shape(container, max(1,w/4), max(2,h/2)*(alpha?2:1));
 			jxrc_set_separate_alpha_image_plane(container, 0);
 			jxrc_set_image_band_presence(container, JXR_BP_ALL);
 			static unsigned char window_params[5] = {0,0,0,0,0};
-			jxr_image_t image = jxr_create_image(max(1,w/4), max(2,h/2), window_params);
+			jxr_image_t image = jxr_create_image(max(1,w/4), max(2,h/2)*(alpha?2:1), window_params);
 
 			if ( !image ) {
 				return false;
 			}
 
-			SetJPEGX555(container,image,gJxrQuality, max(1,w/4), max(2,h/2));
+			SetJPEGX555(container,image,gJxrQuality, max(1,w/4), max(2,h/2)*(alpha?2:1));
 
 			jxrc_begin_image_data(container);
 			jxr_set_block_input(image, Read555Data_ETC1);  
@@ -1195,7 +1477,7 @@ static bool write_etc1(int32_t w, int32_t h, int32_t level, bool flipped, istrea
 			write_uint24(0,ofile);
 			write_uint24(0,ofile);
 		}
-		for ( int32_t d=0; d<max(1,w/4)*max(1,h/4); d++) {
+		for ( int32_t d=0; d<max(1,w/4)*max(1,h/4)*(alpha?2:1); d++) {
             read_uint32(ifile);
             read_uint32(ifile);
         }
@@ -1531,7 +1813,7 @@ static bool write_compressed_alpha_textures(istream &ifile_etc1, istream &ifile_
 	int32_t w = texturew = checkHeader->dwWidth;
 	int32_t h = textureh = checkHeader->dwHeight;
 	
-	write_header(w,h,(ATF_FORMAT_COMPRESSEDRAWALPHA)|(cubeMap?ATF_FORMAT_CUBEMAP:0),checkHeader->dwMipMapCount+1,ofile);
+	write_header(w,h,(gStoreRawCompressed?ATF_FORMAT_COMPRESSEDRAWALPHA:ATF_FORMAT_COMPRESSEDALPHA)|(cubeMap?ATF_FORMAT_CUBEMAP:0),checkHeader->dwMipMapCount+1,ofile);
 	
 	size_t dxt5_pos = ifile_dxt5.tellg();
 	size_t etc1_pos = ifile_etc1.tellg();
@@ -1592,7 +1874,7 @@ static bool write_compressed_alpha_textures(istream &ifile_etc1, istream &ifile_
 			}
 
 			if ( !write_dxt5(w,h,c,dxt_flipped,ifile_dxt5,ofile) ) return false;
-			if ( !write_pvrtc(w,h,c,pvrtc_flipped,ifile_pvrtc,ofile) ) return false;
+			if ( !write_pvrtc_alpha(w,h,c,pvrtc_flipped,ifile_pvrtc,ofile) ) return false;
 			if ( !write_etc1(w,h,c,etc1_flipped,ifile_etc1,ofile,true) ) return false;
 
 			w /= 2;
