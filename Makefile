@@ -20,7 +20,7 @@ LZMA_OBJ=$(LZMA_SRC:.c=.o)
 	
 all: $(JPEGXR_OBJ) $(LZMA_OBJ) dds2atf.o pvr2atfcore.o
 	mkdir -p bin
-	$(CXX) dds2atf.o pvr2atfcore.o 3rdparty/*/*.o -o bin/dds2tf
+	$(CXX) dds2atf.o pvr2atfcore.o 3rdparty/*/*.o -o bin/dds2atf
 
 clean:
 	rm -f bin/dds2atf *.o 3rdparty/*/*.o
